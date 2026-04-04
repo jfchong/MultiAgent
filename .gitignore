@@ -1,0 +1,5 @@
+.superpowers/
+ultra.db
+logs/
+*.pyc
+__pycache__/
