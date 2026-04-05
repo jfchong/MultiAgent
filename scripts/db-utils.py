@@ -285,6 +285,179 @@ def cmd_delete_credential(args):
     print(json.dumps({"deleted": site_domain}))
 
 
+def cmd_create_skill(args):
+    name = category = description = template = None
+    data_schema = "{}"
+    output_schema = "{}"
+    tools = "[]"
+    i = 0
+    while i < len(args):
+        if args[i] == "--name":
+            name = args[i + 1]; i += 2
+        elif args[i] == "--category":
+            category = args[i + 1]; i += 2
+        elif args[i] == "--description":
+            description = args[i + 1]; i += 2
+        elif args[i] == "--template":
+            template = args[i + 1]; i += 2
+        elif args[i] == "--data-schema":
+            data_schema = args[i + 1]; i += 2
+        elif args[i] == "--output-schema":
+            output_schema = args[i + 1]; i += 2
+        elif args[i] == "--tools":
+            tools = args[i + 1]; i += 2
+        else:
+            i += 1
+
+    if not name or not category or not description or not template:
+        print("Error: --name, --category, --description, and --template are required", file=sys.stderr)
+        sys.exit(1)
+
+    conn = get_conn()
+    ns_row = conn.execute("SELECT value FROM config WHERE key = 'default_namespace'").fetchone()
+    namespace = ns_row["value"] if ns_row else "default"
+
+    skill_id = str(uuid.uuid4())
+    ts = now_iso()
+
+    conn.execute("""
+        INSERT INTO skill_registry (skill_id, skill_name, namespace, category, description, agent_template, data_schema, output_schema, tools_required, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (skill_id, name, namespace, category, description, template, data_schema, output_schema, tools, ts, ts))
+    conn.commit()
+    conn.close()
+    print(json.dumps({"skill_id": skill_id, "skill_name": name, "namespace": namespace}))
+
+
+def cmd_list_skills(args):
+    conditions = ["is_active = 1"]
+    params = []
+    i = 0
+    while i < len(args):
+        if args[i] == "--category":
+            conditions.append("category = ?")
+            params.append(args[i + 1])
+            i += 2
+        elif args[i] == "--search":
+            keyword = args[i + 1]
+            conditions.append("(skill_name LIKE ? OR category LIKE ? OR description LIKE ?)")
+            params.extend([f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"])
+            i += 2
+        elif args[i] == "--namespace":
+            conditions.append("namespace = ?")
+            params.append(args[i + 1])
+            i += 2
+        else:
+            i += 1
+
+    sql = "SELECT skill_id, skill_name, namespace, category, description, success_count, failure_count, version, last_used_at FROM skill_registry"
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " ORDER BY success_count DESC"
+
+    conn = get_conn()
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    result = [dict(r) for r in rows]
+    print(json.dumps(result, indent=2))
+
+
+def cmd_get_skill(args):
+    skill_id = args[0]
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM skill_registry WHERE skill_id = ?", (skill_id,)).fetchone()
+    conn.close()
+    print(json.dumps(dict_from_row(row), indent=2))
+
+
+def cmd_create_invocation(args):
+    skill_id = task_id = agent_id = input_data = None
+    i = 0
+    while i < len(args):
+        if args[i] == "--skill-id":
+            skill_id = args[i + 1]; i += 2
+        elif args[i] == "--task-id":
+            task_id = args[i + 1]; i += 2
+        elif args[i] == "--agent-id":
+            agent_id = args[i + 1]; i += 2
+        elif args[i] == "--input-data":
+            input_data = args[i + 1]; i += 2
+        else:
+            i += 1
+
+    if not skill_id or not task_id or not agent_id or not input_data:
+        print("Error: --skill-id, --task-id, --agent-id, and --input-data are required", file=sys.stderr)
+        sys.exit(1)
+
+    invocation_id = str(uuid.uuid4())
+    ts = now_iso()
+
+    conn = get_conn()
+    conn.execute("""
+        INSERT INTO skill_invocations (invocation_id, skill_id, task_id, agent_id, input_data, status, created_at)
+        VALUES (?, ?, ?, ?, ?, 'pending', ?)
+    """, (invocation_id, skill_id, task_id, agent_id, input_data, ts))
+    conn.execute("UPDATE skill_registry SET last_used_at = ?, updated_at = ? WHERE skill_id = ?", (ts, ts, skill_id))
+    conn.commit()
+    conn.close()
+    print(json.dumps({"invocation_id": invocation_id, "skill_id": skill_id, "task_id": task_id}))
+
+
+def cmd_update_invocation(args):
+    invocation_id = args[0]
+    status = output_data = error = None
+    i = 1
+    while i < len(args):
+        if args[i] == "--status":
+            status = args[i + 1]; i += 2
+        elif args[i] == "--output-data":
+            output_data = args[i + 1]; i += 2
+        elif args[i] == "--error":
+            error = args[i + 1]; i += 2
+        else:
+            i += 1
+
+    if not status:
+        print("Error: --status is required", file=sys.stderr)
+        sys.exit(1)
+
+    ts = now_iso()
+    conn = get_conn()
+
+    updates = {"status": status, "completed_at": ts}
+    if output_data:
+        updates["output_data"] = output_data
+    if error:
+        updates["error_message"] = error
+
+    # Calculate duration
+    row = conn.execute("SELECT created_at FROM skill_invocations WHERE invocation_id = ?", (invocation_id,)).fetchone()
+    if row:
+        try:
+            from datetime import datetime as dt
+            s = dt.fromisoformat(row["created_at"].replace("Z", "+00:00"))
+            e = dt.fromisoformat(ts.replace("Z", "+00:00"))
+            updates["duration_seconds"] = (e - s).total_seconds()
+        except:
+            pass
+
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    params = list(updates.values()) + [invocation_id]
+    conn.execute(f"UPDATE skill_invocations SET {set_clause} WHERE invocation_id = ?", params)
+
+    # Update skill success/failure counts
+    inv = conn.execute("SELECT skill_id FROM skill_invocations WHERE invocation_id = ?", (invocation_id,)).fetchone()
+    if inv:
+        if status == "completed":
+            conn.execute("UPDATE skill_registry SET success_count = success_count + 1, updated_at = ? WHERE skill_id = ?", (ts, inv["skill_id"]))
+        elif status == "failed":
+            conn.execute("UPDATE skill_registry SET failure_count = failure_count + 1, updated_at = ? WHERE skill_id = ?", (ts, inv["skill_id"]))
+
+    conn.commit()
+    conn.close()
+    print(json.dumps({"invocation_id": invocation_id, "status": status}))
+
+
 COMMANDS = {
     "query": cmd_query,
     "get-agent": cmd_get_agent,
@@ -299,6 +472,11 @@ COMMANDS = {
     "create-credential": cmd_create_credential,
     "list-credentials": cmd_list_credentials,
     "delete-credential": cmd_delete_credential,
+    "create-skill": cmd_create_skill,
+    "list-skills": cmd_list_skills,
+    "get-skill": cmd_get_skill,
+    "create-invocation": cmd_create_invocation,
+    "update-invocation": cmd_update_invocation,
 }
 
 
