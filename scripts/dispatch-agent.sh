@@ -22,6 +22,76 @@ TASK_ID="${2:?Usage: dispatch-agent.sh <agent_id> <task_id>}"
 MODEL="${3:-sonnet}"
 BACKGROUND="${4:-}"
 
+# --- Error recovery trap ---
+# SESSION_ID and CONSOLIDATED are set later; the trap references them via variables
+# that are guaranteed to exist (initialized empty) before any command that could fail.
+SESSION_ID=""
+CONSOLIDATED=""
+
+cleanup_on_error() {
+    local exit_code=$?
+    echo "[dispatch] ERROR: exit_code=$exit_code — running cleanup" >&2
+
+    # Update session to failed (only if SESSION_ID has been set)
+    if [ -n "$SESSION_ID" ]; then
+        python -c "
+import sqlite3
+from datetime import datetime, timezone
+db = sqlite3.connect('$DB_PATH')
+ts = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+db.execute('''UPDATE sessions
+              SET status = 'failed', completed_at = ?, success = 0
+              WHERE session_id = ?''', (ts, '$SESSION_ID'))
+db.commit()
+db.close()
+" 2>/dev/null || true
+    fi
+
+    # Update agent to error, increment error_count
+    python -c "
+import sqlite3
+from datetime import datetime, timezone
+db = sqlite3.connect('$DB_PATH')
+ts = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+db.execute('''UPDATE agents
+              SET status = 'error', error_count = COALESCE(error_count, 0) + 1, updated_at = ?
+              WHERE agent_id = ?''', (ts, '$AGENT_ID'))
+db.commit()
+db.close()
+" 2>/dev/null || true
+
+    # Check task retry_count vs max_retries; reset to pending if retries remain
+    python -c "
+import sqlite3
+from datetime import datetime, timezone
+db = sqlite3.connect('$DB_PATH')
+db.row_factory = sqlite3.Row
+ts = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+row = db.execute('SELECT retry_count, max_retries FROM tasks WHERE task_id = ?', ('$TASK_ID',)).fetchone()
+if row:
+    retry_count = row['retry_count'] or 0
+    max_retries = row['max_retries'] or 0
+    if retry_count < max_retries:
+        db.execute('''UPDATE tasks
+                      SET status = 'pending', retry_count = ?, updated_at = ?
+                      WHERE task_id = ?''', (retry_count + 1, ts, '$TASK_ID'))
+        print('[dispatch] Task reset to pending (retry ' + str(retry_count + 1) + '/' + str(max_retries) + ')', flush=True)
+    else:
+        db.execute('''UPDATE tasks SET status = 'failed', updated_at = ? WHERE task_id = ?''',
+                   (ts, '$TASK_ID'))
+        print('[dispatch] Task marked failed (no retries remaining)', flush=True)
+    db.commit()
+db.close()
+" 2>/dev/null || true
+
+    # Clean up consolidated prompt file
+    if [ -n "$CONSOLIDATED" ] && [ -f "$CONSOLIDATED" ]; then
+        rm -f "$CONSOLIDATED"
+    fi
+}
+
+trap cleanup_on_error ERR
+
 # --- 1. Read agent info from DB ---
 AGENT_JSON=$(python -c "
 import sqlite3, json
@@ -165,6 +235,7 @@ if [ "$BACKGROUND" = "--background" ]; then
     $CLAUDE_CMD "$TASK_PROMPT" > "$PROJECT_DIR/logs/$AGENT_ID-$TASK_ID.json" 2>&1 &
     PID=$!
     echo "[dispatch] Background PID=$PID" >&2
+
     # Store PID for health monitoring
     python -c "
 import sqlite3
@@ -173,9 +244,73 @@ db.execute('UPDATE agents SET session_id = ? WHERE agent_id = ?', ('$PID', '$AGE
 db.commit()
 db.close()
 "
+
+    # --- Watchdog: kill background process if it exceeds configured timeout ---
+    TIMEOUT_MINUTES=$(python -c "
+import sqlite3
+db = sqlite3.connect('$DB_PATH')
+try:
+    row = db.execute(\"SELECT value FROM config WHERE key = 'stuck_agent_timeout_minutes'\").fetchone()
+    print(int(row[0]) if row else 10)
+except:
+    print(10)
+db.close()
+" 2>/dev/null || echo 10)
+    TIMEOUT_SECONDS=$(( TIMEOUT_MINUTES * 60 ))
+    echo "[dispatch] Watchdog set: $TIMEOUT_MINUTES min ($TIMEOUT_SECONDS s) for PID=$PID" >&2
+    (
+        sleep "$TIMEOUT_SECONDS"
+        if kill -0 "$PID" 2>/dev/null; then
+            echo "[dispatch] Watchdog: killing timed-out PID=$PID (agent=$AGENT_ID)" >&2
+            kill "$PID" 2>/dev/null || true
+            # Mark session and agent as failed due to timeout
+            python -c "
+import sqlite3
+from datetime import datetime, timezone
+db = sqlite3.connect('$DB_PATH')
+ts = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+db.execute('''UPDATE sessions SET status = 'failed', completed_at = ?, success = 0,
+              error_message = 'Watchdog timeout' WHERE session_id = ?''',
+           (ts, '$SESSION_ID'))
+db.execute('''UPDATE agents SET status = 'error',
+              error_count = COALESCE(error_count, 0) + 1, updated_at = ?
+              WHERE agent_id = ?''', (ts, '$AGENT_ID'))
+db.commit()
+db.close()
+" 2>/dev/null || true
+        fi
+    ) &
+
     echo "{\"pid\": $PID, \"agent_id\": \"$AGENT_ID\", \"task_id\": \"$TASK_ID\", \"session_id\": \"$SESSION_ID\"}"
 else
-    RESULT=$($CLAUDE_CMD "$TASK_PROMPT" 2>"$PROJECT_DIR/logs/$AGENT_ID-$TASK_ID.stderr")
+    STDERR_FILE="$PROJECT_DIR/logs/$AGENT_ID-$TASK_ID.stderr"
+    RESULT=""
+    CLAUDE_EXIT=0
+    RESULT=$($CLAUDE_CMD "$TASK_PROMPT" 2>"$STDERR_FILE") || CLAUDE_EXIT=$?
+
+    if [ "$CLAUDE_EXIT" -ne 0 ]; then
+        ERROR_MSG=$(head -c 2000 "$STDERR_FILE" 2>/dev/null || echo "unknown error")
+        echo "[dispatch] claude -p failed with exit $CLAUDE_EXIT: $ERROR_MSG" >&2
+
+        # Write error to session
+        python -c "
+import sqlite3
+from datetime import datetime, timezone
+db = sqlite3.connect('$DB_PATH')
+ts = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+error_msg = open('$STDERR_FILE').read(2000) if __import__('os').path.exists('$STDERR_FILE') else 'claude exit $CLAUDE_EXIT'
+db.execute('''UPDATE sessions SET status = 'failed', completed_at = ?, success = 0,
+              error_message = ? WHERE session_id = ?''',
+           (ts, error_msg, '$SESSION_ID'))
+db.commit()
+db.close()
+" 2>/dev/null || true
+
+        # Clean up and let ERR trap handle agent/task updates
+        rm -f "$CONSOLIDATED"
+        exit "$CLAUDE_EXIT"
+    fi
+
     echo "$RESULT"
 
     # Clean up consolidated prompt
