@@ -5,11 +5,12 @@
 #   bash scripts/dispatch-agent.sh <agent_id> <task_id> [--model sonnet] [--background]
 #
 # The script:
-# 1. Reads the agent's prompt_file from SQLite
+# 1. Reads the agent's prompt_file and config from SQLite
 # 2. Reads the task context from SQLite
-# 3. Builds a consolidated system prompt (base + protocols)
-# 4. Dispatches via `claude -p` with --append-system-prompt-file
-# 5. Captures output and updates the DB
+# 3. Creates a session record for tracking
+# 4. Builds a consolidated system prompt (base + protocols + browser if needed)
+# 5. Dispatches via `claude -p` with --append-system-prompt-file
+# 6. Updates session and agent status on completion
 
 set -euo pipefail
 
@@ -41,6 +42,7 @@ fi
 
 PROMPT_FILE=$(echo "$AGENT_JSON" | python -c "import sys,json; print(json.load(sys.stdin).get('prompt_file',''))")
 AGENT_LEVEL=$(echo "$AGENT_JSON" | python -c "import sys,json; print(json.load(sys.stdin).get('level',1))")
+AGENT_CONFIG=$(echo "$AGENT_JSON" | python -c "import sys,json; print(json.load(sys.stdin).get('config_json','{}'))")
 
 # --- 2. Read task context from DB ---
 TASK_JSON=$(python -c "
@@ -74,6 +76,27 @@ db.commit()
 db.close()
 "
 
+# --- 3b. Create session record ---
+SESSION_ID=$(python -c "
+import sqlite3, uuid, json
+from datetime import datetime, timezone
+db = sqlite3.connect('$DB_PATH')
+sid = str(uuid.uuid4())
+browser_cat = None
+try:
+    config = json.loads('''$AGENT_CONFIG''')
+    browser_cat = config.get('browser_category')
+except:
+    pass
+ts = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+db.execute('INSERT INTO sessions (session_id, agent_id, task_id, browser_category, status, started_at) VALUES (?, ?, ?, ?, ?, ?)',
+    (sid, '$AGENT_ID', '$TASK_ID', browser_cat, 'running', ts))
+db.commit()
+print(sid)
+db.close()
+")
+echo "[dispatch] Session=$SESSION_ID" >&2
+
 # --- 4. Build the prompt ---
 TASK_PROMPT="You are agent '$AGENT_ID' (Level $AGENT_LEVEL). Your assigned task:
 
@@ -88,6 +111,7 @@ print(f\"Framework: {t.get('framework', 'Not set')}\")
 print(f\"Input Data: {t.get('input_data', 'None')}\")
 print(f\"Dependencies: {t.get('depends_on_json', '[]')}\")
 ")
+Session ID: $SESSION_ID
 
 Execute your task following your system prompt instructions. Use the database access and reporting protocols. When done, print a JSON summary to stdout."
 
@@ -112,6 +136,24 @@ for protocol in db-access-protocol.md reporting-protocol.md memory-protocol.md e
     fi
 done
 
+# Append browser protocol if agent has browser_category
+BROWSER_CAT=$(echo "$AGENT_CONFIG" | python -c "
+import sys, json
+try:
+    config = json.loads(sys.stdin.read())
+    print(config.get('browser_category', ''))
+except:
+    print('')
+")
+
+if [ -n "$BROWSER_CAT" ]; then
+    if [ -f "$PROJECT_DIR/prompts/browser-protocol.md" ]; then
+        echo "" >> "$CONSOLIDATED"
+        cat "$PROJECT_DIR/prompts/browser-protocol.md" >> "$CONSOLIDATED"
+        echo "[dispatch] Browser protocol appended (category=$BROWSER_CAT)" >&2
+    fi
+fi
+
 # --- 6. Dispatch ---
 echo "[dispatch] Agent=$AGENT_ID Task=$TASK_ID Model=$MODEL" >&2
 
@@ -131,13 +173,34 @@ db.execute('UPDATE agents SET session_id = ? WHERE agent_id = ?', ('$PID', '$AGE
 db.commit()
 db.close()
 "
-    echo "{\"pid\": $PID, \"agent_id\": \"$AGENT_ID\", \"task_id\": \"$TASK_ID\"}"
+    echo "{\"pid\": $PID, \"agent_id\": \"$AGENT_ID\", \"task_id\": \"$TASK_ID\", \"session_id\": \"$SESSION_ID\"}"
 else
     RESULT=$($CLAUDE_CMD "$TASK_PROMPT" 2>"$PROJECT_DIR/logs/$AGENT_ID-$TASK_ID.stderr")
     echo "$RESULT"
 
     # Clean up consolidated prompt
     rm -f "$CONSOLIDATED"
+
+    # Update session with results
+    python -c "
+import sqlite3
+from datetime import datetime, timezone
+db = sqlite3.connect('$DB_PATH')
+ts = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+row = db.execute('SELECT started_at FROM sessions WHERE session_id = ?', ('$SESSION_ID',)).fetchone()
+if row:
+    started = row[0]
+    try:
+        s = datetime.fromisoformat(started.replace('Z', '+00:00'))
+        e = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+        duration = (e - s).total_seconds()
+    except:
+        duration = 0
+    db.execute('UPDATE sessions SET status = ?, completed_at = ?, duration_seconds = ?, success = ?, output_snapshot = ? WHERE session_id = ?',
+        ('completed', ts, duration, 1, '''$(echo "$RESULT" | head -c 10000)''', '$SESSION_ID'))
+db.commit()
+db.close()
+"
 
     # Mark agent as idle
     python -c "
