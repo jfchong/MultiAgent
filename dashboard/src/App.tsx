@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
 import OverviewPage from "@/pages/OverviewPage";
+import RequestsPage from "@/pages/RequestsPage";
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -18,7 +19,7 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<OverviewPage />} />
-        <Route path="requests" element={<PlaceholderPage title="Requests" />} />
+        <Route path="requests" element={<RequestsPage />} />
         <Route path="tasks" element={<PlaceholderPage title="Tasks" />} />
         <Route path="tasks/:id" element={<PlaceholderPage title="Task Detail" />} />
         <Route path="agents" element={<PlaceholderPage title="Agents" />} />
