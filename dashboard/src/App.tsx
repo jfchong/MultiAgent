@@ -2,6 +2,8 @@ import { Routes, Route } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
 import OverviewPage from "@/pages/OverviewPage";
 import RequestsPage from "@/pages/RequestsPage";
+import TasksPage from "@/pages/TasksPage";
+import TaskDetailPage from "@/pages/TaskDetailPage";
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -20,8 +22,8 @@ export default function App() {
       <Route element={<Layout />}>
         <Route index element={<OverviewPage />} />
         <Route path="requests" element={<RequestsPage />} />
-        <Route path="tasks" element={<PlaceholderPage title="Tasks" />} />
-        <Route path="tasks/:id" element={<PlaceholderPage title="Task Detail" />} />
+        <Route path="tasks" element={<TasksPage />} />
+        <Route path="tasks/:id" element={<TaskDetailPage />} />
         <Route path="agents" element={<PlaceholderPage title="Agents" />} />
         <Route path="agents/:id" element={<PlaceholderPage title="Agent Detail" />} />
         <Route path="releases" element={<PlaceholderPage title="Work Releases" />} />
