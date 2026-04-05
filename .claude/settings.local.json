@@ -22,7 +22,8 @@
       "Bash(python scripts/db-utils.py list-tasks --status assigned --agent planner)",
       "Bash(python -c \":*)",
       "Bash(python scripts/db-utils.py query \"DELETE FROM tasks\")",
-      "Bash(python scripts/db-utils.py list-tasks)"
+      "Bash(python scripts/db-utils.py list-tasks)",
+      "Bash(bash -n scripts/dispatch-agent.sh)"
     ]
   }
 }
