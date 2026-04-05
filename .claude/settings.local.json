@@ -23,7 +23,20 @@
       "Bash(python -c \":*)",
       "Bash(python scripts/db-utils.py query \"DELETE FROM tasks\")",
       "Bash(python scripts/db-utils.py list-tasks)",
-      "Bash(bash -n scripts/dispatch-agent.sh)"
+      "Bash(bash -n scripts/dispatch-agent.sh)",
+      "Bash(find C:UsersjfchoDesktopCoWork -type f -name *cowork* -o -name *dispatch* -o -name *db-init*)",
+      "Bash(grep -r \"CoWork\\\\|cowork\" C:UsersjfchoDesktopCoWorkMultiAgent --include=*.md --include=*.py --include=*.json)",
+      "Bash(grep -r \"preview\\\\|browser\\\\|chrome\" C:UsersjfchoDesktopCoWorkMultiAgent --include=*.md --include=*.py)",
+      "Bash(grep -r \"cowork\\\\|CoWork\" C:Usersjfcho.claude --include=*.md --include=*.json)",
+      "Bash(start \"\" \"docs/superpowers/specs/2026-04-05-browser-sessions-design.md\")",
+      "Bash(python scripts/db-utils.py create-credential --domain csshome.info --label \"PPPSU CSS Portal\" --username pppsu_admin --password secret123)",
+      "Bash(python scripts/db-utils.py list-credentials)",
+      "Bash(python scripts/db-utils.py delete-credential csshome.info)",
+      "Bash(python scripts/db-utils.py list-sessions --success 1)",
+      "Bash(python scripts/db-utils.py list-sessions --browser)",
+      "Bash(python scripts/db-utils.py query \"DELETE FROM session_recordings\")",
+      "Bash(python scripts/db-utils.py query \"DELETE FROM sessions\")",
+      "Bash(python scripts/db-utils.py query \"DELETE FROM credentials\")"
     ]
   }
 }
