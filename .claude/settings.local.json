@@ -9,7 +9,20 @@
       "Bash(export PATH=\"/c/Program Files/GitHub CLI:$PATH\")",
       "Bash(gh repo:*)",
       "Bash(gh pr:*)",
-      "Bash(find /c/VSClaude -type f \\\\\\(-name *.js -o -name *.ts -o -name *.py -o -name *.sh -o -name *.bash \\\\\\))"
+      "Bash(find /c/VSClaude -type f \\\\\\(-name *.js -o -name *.ts -o -name *.py -o -name *.sh -o -name *.bash \\\\\\))",
+      "Bash(python scripts/db-init.py)",
+      "Bash(python -c \"import sqlite3; c=sqlite3.connect\\(''ultra.db''\\); print\\(c.execute\\(''PRAGMA journal_mode''\\).fetchone\\(\\)\\); c.close\\(\\)\")",
+      "Bash(python scripts/db-utils.py get-agent planner)",
+      "Bash(python scripts/db-utils.py create-task --title \"Test task\" --description \"A test\" --assigned planner --priority 3)",
+      "Bash(python scripts/db-utils.py list-tasks --status assigned)",
+      "Bash(python scripts/db-utils.py get-config default_namespace)",
+      "Bash(python scripts/db-utils.py query \"DELETE FROM tasks WHERE title = ''Test task''\")",
+      "Bash(chmod +x \"C:/Users/jfcho/Desktop/CoWork/MultiAgent/scripts/dispatch-agent.sh\")",
+      "Bash(bash -n \"C:/Users/jfcho/Desktop/CoWork/MultiAgent/scripts/dispatch-agent.sh\")",
+      "Bash(python scripts/db-utils.py list-tasks --status assigned --agent planner)",
+      "Bash(python -c \":*)",
+      "Bash(python scripts/db-utils.py query \"DELETE FROM tasks\")",
+      "Bash(python scripts/db-utils.py list-tasks)"
     ]
   }
 }
