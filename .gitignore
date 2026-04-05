@@ -3,3 +3,4 @@ ultra.db
 logs/
 *.pyc
 __pycache__/
+dashboard/node_modules/
