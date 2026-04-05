@@ -1,0 +1,36 @@
+import { Routes, Route } from "react-router-dom";
+import { Layout } from "@/components/layout/Layout";
+import OverviewPage from "@/pages/OverviewPage";
+
+function PlaceholderPage({ title }: { title: string }) {
+  return (
+    <div className="flex items-center justify-center h-full">
+      <div className="text-center">
+        <h1 className="text-2xl font-bold text-foreground mb-2">{title}</h1>
+        <p className="text-muted-foreground">Coming soon</p>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route element={<Layout />}>
+        <Route index element={<OverviewPage />} />
+        <Route path="requests" element={<PlaceholderPage title="Requests" />} />
+        <Route path="tasks" element={<PlaceholderPage title="Tasks" />} />
+        <Route path="tasks/:id" element={<PlaceholderPage title="Task Detail" />} />
+        <Route path="agents" element={<PlaceholderPage title="Agents" />} />
+        <Route path="agents/:id" element={<PlaceholderPage title="Agent Detail" />} />
+        <Route path="releases" element={<PlaceholderPage title="Work Releases" />} />
+        <Route path="skills" element={<PlaceholderPage title="Skills" />} />
+        <Route path="skills/:id" element={<PlaceholderPage title="Skill Detail" />} />
+        <Route path="sessions" element={<PlaceholderPage title="Sessions" />} />
+        <Route path="sessions/:id" element={<PlaceholderPage title="Session Detail" />} />
+        <Route path="improvements" element={<PlaceholderPage title="Improvements" />} />
+        <Route path="settings" element={<PlaceholderPage title="Settings" />} />
+      </Route>
+    </Routes>
+  );
+}
