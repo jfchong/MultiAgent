@@ -167,6 +167,124 @@ def cmd_set_config(args):
     print(json.dumps({"key": args[0], "value": args[1]}))
 
 
+def cmd_list_sessions(args):
+    conditions = []
+    params = []
+    i = 0
+    while i < len(args):
+        if args[i] == "--status":
+            conditions.append("status = ?")
+            params.append(args[i + 1])
+            i += 2
+        elif args[i] == "--agent":
+            conditions.append("agent_id = ?")
+            params.append(args[i + 1])
+            i += 2
+        elif args[i] == "--task":
+            conditions.append("task_id = ?")
+            params.append(args[i + 1])
+            i += 2
+        elif args[i] == "--success":
+            conditions.append("success = ?")
+            params.append(int(args[i + 1]))
+            i += 2
+        elif args[i] == "--browser":
+            conditions.append("browser_category IS NOT NULL")
+            i += 1
+        elif args[i] == "--limit":
+            i += 2
+        else:
+            i += 1
+
+    sql = "SELECT * FROM sessions"
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " ORDER BY started_at DESC"
+
+    limit = 50
+    for j in range(len(args)):
+        if args[j] == "--limit" and j + 1 < len(args):
+            limit = int(args[j + 1])
+    sql += f" LIMIT {limit}"
+
+    conn = get_conn()
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    result = [dict(r) for r in rows]
+    print(json.dumps(result, indent=2))
+
+
+def cmd_get_session(args):
+    session_id = args[0]
+    conn = get_conn()
+    session = conn.execute("SELECT * FROM sessions WHERE session_id = ?", (session_id,)).fetchone()
+    recordings = conn.execute(
+        "SELECT * FROM session_recordings WHERE session_id = ? ORDER BY step_number",
+        (session_id,)
+    ).fetchall()
+    conn.close()
+    result = dict_from_row(session) if session else None
+    if result:
+        result["recordings"] = [dict(r) for r in recordings]
+    print(json.dumps(result, indent=2))
+
+
+def cmd_create_credential(args):
+    site_domain = label = auth_type = None
+    creds = {}
+    i = 0
+    while i < len(args):
+        if args[i] == "--domain":
+            site_domain = args[i + 1]; i += 2
+        elif args[i] == "--label":
+            label = args[i + 1]; i += 2
+        elif args[i] == "--auth-type":
+            auth_type = args[i + 1]; i += 2
+        elif args[i] == "--username":
+            creds["username"] = args[i + 1]; i += 2
+        elif args[i] == "--password":
+            creds["password"] = args[i + 1]; i += 2
+        elif args[i] == "--api-key":
+            creds["api_key"] = args[i + 1]; i += 2
+        else:
+            i += 1
+
+    if not site_domain or not label:
+        print("Error: --domain and --label are required", file=sys.stderr)
+        sys.exit(1)
+
+    credential_id = str(uuid.uuid4())
+    ts = now_iso()
+    if not auth_type:
+        auth_type = "password"
+
+    conn = get_conn()
+    conn.execute("""
+        INSERT OR REPLACE INTO credentials (credential_id, site_domain, label, auth_type, credentials_json, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (credential_id, site_domain, label, auth_type, json.dumps(creds), ts, ts))
+    conn.commit()
+    conn.close()
+    print(json.dumps({"credential_id": credential_id, "site_domain": site_domain}))
+
+
+def cmd_list_credentials(args):
+    conn = get_conn()
+    rows = conn.execute("SELECT credential_id, site_domain, label, auth_type, created_at, updated_at FROM credentials ORDER BY site_domain").fetchall()
+    conn.close()
+    result = [dict(r) for r in rows]
+    print(json.dumps(result, indent=2))
+
+
+def cmd_delete_credential(args):
+    site_domain = args[0]
+    conn = get_conn()
+    conn.execute("DELETE FROM credentials WHERE site_domain = ?", (site_domain,))
+    conn.commit()
+    conn.close()
+    print(json.dumps({"deleted": site_domain}))
+
+
 COMMANDS = {
     "query": cmd_query,
     "get-agent": cmd_get_agent,
@@ -176,6 +294,11 @@ COMMANDS = {
     "update-task": cmd_update_task,
     "get-config": cmd_get_config,
     "set-config": cmd_set_config,
+    "list-sessions": cmd_list_sessions,
+    "get-session": cmd_get_session,
+    "create-credential": cmd_create_credential,
+    "list-credentials": cmd_list_credentials,
+    "delete-credential": cmd_delete_credential,
 }
 
 
