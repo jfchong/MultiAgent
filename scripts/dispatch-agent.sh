@@ -105,7 +105,7 @@ fi
 # Append protocol prompts
 echo "" >> "$CONSOLIDATED"
 echo "---" >> "$CONSOLIDATED"
-for protocol in db-access-protocol.md reporting-protocol.md; do
+for protocol in db-access-protocol.md reporting-protocol.md memory-protocol.md evaluation-protocol.md; do
     if [ -f "$PROJECT_DIR/prompts/$protocol" ]; then
         echo "" >> "$CONSOLIDATED"
         cat "$PROJECT_DIR/prompts/$protocol" >> "$CONSOLIDATED"
