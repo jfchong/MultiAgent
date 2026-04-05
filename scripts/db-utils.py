@@ -10,6 +10,9 @@ Usage:
   python db-utils.py update-task <task_id> --status in_progress
   python db-utils.py get-config <key>
   python db-utils.py set-config <key> <value>
+  python db-utils.py create-release --task-id <id> --agent-id <id> --title "..." --action-type execute
+  python db-utils.py list-releases [--status pending] [--agent planner] [--level 1]
+  python db-utils.py update-release <release_id> --status approved
 """
 
 import sqlite3
@@ -583,6 +586,143 @@ def cmd_update_agent(args):
     print(json.dumps({"agent_id": agent_id, "updated": list(updates.keys())}))
 
 
+def cmd_create_release(args):
+    task_id = agent_id = title = action_type = None
+    agent_level = 1
+    description = input_preview = output_preview = None
+    i = 0
+    while i < len(args):
+        if args[i] == "--task-id":
+            task_id = args[i + 1]; i += 2
+        elif args[i] == "--agent-id":
+            agent_id = args[i + 1]; i += 2
+        elif args[i] == "--title":
+            title = args[i + 1]; i += 2
+        elif args[i] == "--action-type":
+            action_type = args[i + 1]; i += 2
+        elif args[i] == "--agent-level":
+            agent_level = int(args[i + 1]); i += 2
+        elif args[i] == "--description":
+            description = args[i + 1]; i += 2
+        elif args[i] == "--input-preview":
+            input_preview = args[i + 1]; i += 2
+        elif args[i] == "--output-preview":
+            output_preview = args[i + 1]; i += 2
+        else:
+            i += 1
+
+    if not task_id or not agent_id or not title or not action_type:
+        print("Error: --task-id, --agent-id, --title, and --action-type are required", file=sys.stderr)
+        sys.exit(1)
+
+    release_id = str(uuid.uuid4())
+    ts = now_iso()
+
+    # Check auto-release rules
+    conn = get_conn()
+    rules = conn.execute("""
+        SELECT rule_id FROM auto_release_rules
+        WHERE is_enabled = 1
+          AND (match_agent_type = '*' OR match_agent_type = (SELECT agent_type FROM agents WHERE agent_id = ?))
+          AND (match_action_type = '*' OR match_action_type = ?)
+          AND (match_title_pattern IS NULL OR ? LIKE '%' || match_title_pattern || '%')
+    """, (agent_id, action_type, title)).fetchone()
+
+    status = "pending"
+    auto_release = 0
+    rule_id = None
+    if rules:
+        status = "auto_released"
+        auto_release = 1
+        rule_id = rules["rule_id"]
+        conn.execute("UPDATE auto_release_rules SET fire_count = fire_count + 1 WHERE rule_id = ?", (rule_id,))
+
+    conn.execute("""
+        INSERT INTO work_releases (release_id, task_id, agent_id, agent_level, title, description, action_type, input_preview, output_preview, status, auto_release, auto_release_rule_id, reviewed_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (release_id, task_id, agent_id, agent_level, title, description, action_type, input_preview, output_preview, status, auto_release, rule_id, ts if auto_release else None, ts))
+
+    if status == "auto_released":
+        conn.execute("UPDATE tasks SET status = 'in_progress', updated_at = ? WHERE task_id = ? AND status = 'awaiting_release'", (ts, task_id))
+
+    conn.commit()
+    conn.close()
+    print(json.dumps({"release_id": release_id, "status": status, "auto_released": bool(auto_release)}))
+
+
+def cmd_list_releases(args):
+    conditions = []
+    params = []
+    i = 0
+    while i < len(args):
+        if args[i] == "--status":
+            conditions.append("wr.status = ?")
+            params.append(args[i + 1])
+            i += 2
+        elif args[i] == "--agent":
+            conditions.append("wr.agent_id = ?")
+            params.append(args[i + 1])
+            i += 2
+        elif args[i] == "--level":
+            conditions.append("wr.agent_level = ?")
+            params.append(int(args[i + 1]))
+            i += 2
+        elif args[i] == "--action-type":
+            conditions.append("wr.action_type = ?")
+            params.append(args[i + 1])
+            i += 2
+        else:
+            i += 1
+
+    sql = """SELECT wr.*, a.agent_name, a.agent_type
+             FROM work_releases wr
+             LEFT JOIN agents a ON wr.agent_id = a.agent_id"""
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " ORDER BY wr.created_at DESC"
+
+    conn = get_conn()
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    result = [dict(r) for r in rows]
+    print(json.dumps(result, indent=2))
+
+
+def cmd_update_release(args):
+    release_id = args[0]
+    status = None
+    i = 1
+    while i < len(args):
+        if args[i] == "--status":
+            status = args[i + 1]; i += 2
+        else:
+            i += 1
+
+    if not status or status not in ("approved", "rejected"):
+        print("Error: --status must be 'approved' or 'rejected'", file=sys.stderr)
+        sys.exit(1)
+
+    ts = now_iso()
+    conn = get_conn()
+
+    release = conn.execute("SELECT task_id FROM work_releases WHERE release_id = ?", (release_id,)).fetchone()
+    if not release:
+        print("Error: release not found", file=sys.stderr)
+        conn.close()
+        sys.exit(1)
+
+    conn.execute("UPDATE work_releases SET status = ?, reviewed_at = ? WHERE release_id = ?", (status, ts, release_id))
+
+    if status == "approved":
+        conn.execute("UPDATE tasks SET status = 'in_progress', updated_at = ? WHERE task_id = ? AND status = 'awaiting_release'", (ts, release["task_id"]))
+    elif status == "rejected":
+        conn.execute("UPDATE tasks SET status = 'failed', error_message = 'Release rejected by user', updated_at = ? WHERE task_id = ? AND status = 'awaiting_release'", (ts, release["task_id"]))
+
+    conn.commit()
+    conn.close()
+    print(json.dumps({"release_id": release_id, "status": status}))
+
+
 COMMANDS = {
     "query": cmd_query,
     "get-agent": cmd_get_agent,
@@ -605,6 +745,9 @@ COMMANDS = {
     "get-skill": cmd_get_skill,
     "create-invocation": cmd_create_invocation,
     "update-invocation": cmd_update_invocation,
+    "create-release": cmd_create_release,
+    "list-releases": cmd_list_releases,
+    "update-release": cmd_update_release,
 }
 
 
