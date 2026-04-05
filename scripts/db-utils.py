@@ -458,9 +458,137 @@ def cmd_update_invocation(args):
     print(json.dumps({"invocation_id": invocation_id, "status": status}))
 
 
+def cmd_list_agents(args):
+    """List agents with optional --status, --level, --type filters."""
+    conditions = []
+    params = []
+    i = 0
+    while i < len(args):
+        if args[i] == "--status":
+            conditions.append("status = ?")
+            params.append(args[i + 1])
+            i += 2
+        elif args[i] == "--level":
+            conditions.append("level = ?")
+            params.append(int(args[i + 1]))
+            i += 2
+        elif args[i] == "--type":
+            conditions.append("agent_type = ?")
+            params.append(args[i + 1])
+            i += 2
+        elif args[i] == "--parent":
+            conditions.append("parent_agent_id = ?")
+            params.append(args[i + 1])
+            i += 2
+        else:
+            i += 1
+
+    sql = "SELECT * FROM agents"
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " ORDER BY level ASC, agent_name ASC"
+
+    conn = get_conn()
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    result = [dict(r) for r in rows]
+    print(json.dumps(result, indent=2))
+
+
+def cmd_create_agent(args):
+    """Create a new agent (for Sub-Agent/Worker spawning).
+
+    Usage:
+      python db-utils.py create-agent --name "Tinker-ABC" --type sub_agent --level 2 --parent executor
+        [--prompt-file agents/sub-agent.md] [--sub-role tinker] [--config '{"key":"val"}']
+    """
+    name = agent_type = prompt_file = sub_role = None
+    level = None
+    parent = None
+    config_json = "{}"
+    i = 0
+    while i < len(args):
+        if args[i] == "--name":
+            name = args[i + 1]; i += 2
+        elif args[i] == "--type":
+            agent_type = args[i + 1]; i += 2
+        elif args[i] == "--level":
+            level = int(args[i + 1]); i += 2
+        elif args[i] == "--parent":
+            parent = args[i + 1]; i += 2
+        elif args[i] == "--prompt-file":
+            prompt_file = args[i + 1]; i += 2
+        elif args[i] == "--sub-role":
+            sub_role = args[i + 1]; i += 2
+        elif args[i] == "--config":
+            config_json = args[i + 1]; i += 2
+        else:
+            i += 1
+
+    if not name or not agent_type or level is None:
+        print("Error: --name, --type, and --level are required", file=sys.stderr)
+        sys.exit(1)
+
+    agent_id = f"{agent_type[:4]}-{uuid.uuid4().hex[:8]}"
+    ts = now_iso()
+
+    conn = get_conn()
+    conn.execute("""
+        INSERT INTO agents (agent_id, agent_name, agent_type, level, parent_agent_id,
+                            prompt_file, sub_agent_role, config_json, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (agent_id, name, agent_type, level, parent, prompt_file, sub_role, config_json, ts, ts))
+    conn.commit()
+    conn.close()
+
+    print(json.dumps({"agent_id": agent_id, "agent_name": name, "agent_type": agent_type, "level": level}))
+
+
+def cmd_update_agent(args):
+    """Update agent fields.
+
+    Usage:
+      python db-utils.py update-agent <agent_id> --status idle --config '{"key":"val"}'
+    """
+    agent_id = args[0]
+    updates = {}
+    i = 1
+    while i < len(args):
+        if args[i].startswith("--"):
+            key = args[i][2:].replace("-", "_")
+            # Map common aliases
+            if key == "prompt_file":
+                key = "prompt_file"
+            elif key == "sub_role":
+                key = "sub_agent_role"
+            elif key == "config":
+                key = "config_json"
+            updates[key] = args[i + 1]
+            i += 2
+        else:
+            i += 1
+
+    if not updates:
+        print("Error: no updates specified", file=sys.stderr)
+        sys.exit(1)
+
+    updates["updated_at"] = now_iso()
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    params = list(updates.values()) + [agent_id]
+
+    conn = get_conn()
+    conn.execute(f"UPDATE agents SET {set_clause} WHERE agent_id = ?", params)
+    conn.commit()
+    conn.close()
+    print(json.dumps({"agent_id": agent_id, "updated": list(updates.keys())}))
+
+
 COMMANDS = {
     "query": cmd_query,
     "get-agent": cmd_get_agent,
+    "list-agents": cmd_list_agents,
+    "create-agent": cmd_create_agent,
+    "update-agent": cmd_update_agent,
     "get-task": cmd_get_task,
     "list-tasks": cmd_list_tasks,
     "create-task": cmd_create_task,
