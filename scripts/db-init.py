@@ -242,6 +242,63 @@ def create_tables(conn):
     c.execute("CREATE INDEX IF NOT EXISTS idx_improvement_category ON improvement_log(category)")
 
     c.execute("""
+    CREATE TABLE IF NOT EXISTS sessions (
+        session_id        TEXT PRIMARY KEY,
+        agent_id          TEXT NOT NULL REFERENCES agents(agent_id),
+        task_id           TEXT NOT NULL REFERENCES tasks(task_id),
+        parent_session_id TEXT REFERENCES sessions(session_id),
+        browser_category  TEXT CHECK(browser_category IN ('SS-SM','SS-MM','MS-SM','MS-MM') OR browser_category IS NULL),
+        status            TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running','completed','failed','timeout')),
+        started_at        TEXT NOT NULL,
+        completed_at      TEXT,
+        duration_seconds  REAL,
+        success           INTEGER CHECK(success IN (0, 1) OR success IS NULL),
+        summary           TEXT,
+        output_snapshot   TEXT,
+        error_message     TEXT,
+        created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_task ON sessions(task_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_success ON sessions(success)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id)")
+
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS session_recordings (
+        recording_id  TEXT PRIMARY KEY,
+        session_id    TEXT NOT NULL REFERENCES sessions(session_id),
+        step_number   INTEGER NOT NULL,
+        action_type   TEXT NOT NULL CHECK(action_type IN (
+            'auto_login','navigate','click','fill','screenshot',
+            'wait','extract','assert'
+        )),
+        target        TEXT,
+        value         TEXT,
+        result        TEXT,
+        timestamp     TEXT NOT NULL,
+        duration_ms   INTEGER,
+        UNIQUE(session_id, step_number)
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_recordings_session ON session_recordings(session_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_recordings_action ON session_recordings(action_type)")
+
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS credentials (
+        credential_id    TEXT PRIMARY KEY,
+        site_domain      TEXT NOT NULL UNIQUE,
+        label            TEXT NOT NULL,
+        auth_type        TEXT NOT NULL DEFAULT 'password' CHECK(auth_type IN ('password','oauth','api_key','cookie')),
+        credentials_json TEXT NOT NULL,
+        created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_credentials_domain ON credentials(site_domain)")
+
+    c.execute("""
     CREATE TABLE IF NOT EXISTS config (
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL
