@@ -24,11 +24,15 @@ import sys
 import time
 import logging
 import signal
+import shutil
 from datetime import datetime, timezone, timedelta
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(PROJECT_DIR, "ultra.db")
 DISPATCH_SCRIPT = os.path.join(PROJECT_DIR, "scripts", "dispatch-agent.sh")
+
+# Locate bash on Windows (subprocess needs the full path)
+BASH_PATH = shutil.which("bash") or "bash"
 LOG_DIR = os.path.join(PROJECT_DIR, "logs")
 
 # Ensure logs directory exists
@@ -421,7 +425,7 @@ def dispatch_ready_tasks(conn, dry_run=False):
             continue
 
         # Dispatch via subprocess
-        cmd = ["bash", DISPATCH_SCRIPT, agent_id, task_id, "sonnet", "--background"]
+        cmd = [BASH_PATH, DISPATCH_SCRIPT, agent_id, task_id, "sonnet", "--background"]
         log.info("Dispatching: %s", " ".join(cmd))
 
         try:
