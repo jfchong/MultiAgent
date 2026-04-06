@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultra Agent — Work Release Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <h1>Ultra Agent — Work Release Dashboard</h1>
+            <span class="subtitle">Ultra Agent System</span>
+        </div>
+        <div class="status-bar" id="status-bar">
+            <div class="status-item">
+                <span class="status-label">Running Agents</span>
+                <span class="status-value" id="stat-running">-</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Pending Releases</span>
+                <span class="status-value pending" id="stat-pending">-</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Active Auto-Rules</span>
+                <span class="status-value" id="stat-rules">-</span>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- Filter controls -->
+        <div class="filter-bar">
+            <div class="filter-group">
+                <label>Filter:</label>
+                <div class="filter-buttons" id="filter-buttons">
+                    <button class="btn filter-btn active" data-status="">All</button>
+                    <button class="btn filter-btn" data-status="pending">Pending</button>
+                    <button class="btn filter-btn" data-status="approved">Approved</button>
+                    <button class="btn filter-btn" data-status="rejected">Rejected</button>
+                    <button class="btn filter-btn" data-status="auto_released">Auto-Released</button>
+                </div>
+            </div>
+            <div class="filter-group">
+                <label>
+                    <input type="checkbox" id="auto-refresh" checked>
+                    Auto-refresh (5s)
+                </label>
+            </div>
+            <div class="batch-actions">
+                <button class="btn btn-approve-all" id="btn-approve-all" title="Approve all pending releases">Approve All</button>
+            </div>
+        </div>
+
+        <!-- Releases container (populated by JS) -->
+        <div id="releases-container">
+            <div class="loading">Loading releases...</div>
+        </div>
+
+        <!-- Auto-Release Rules (collapsible) -->
+        <section class="rules-section">
+            <div class="rules-header" id="rules-toggle">
+                <h2>Auto-Release Rules</h2>
+                <button class="btn btn-toggle" id="rules-toggle-btn" aria-expanded="false" aria-controls="rules-body">
+                    Show Rules <span class="toggle-icon" id="rules-toggle-icon">&#9654;</span>
+                </button>
+            </div>
+            <div class="rules-body" id="rules-body" hidden>
+                <div id="rules-container">
+                    <table class="rules-table" id="rules-table">
+                        <thead>
+                            <tr>
+                                <th>Agent Type</th>
+                                <th>Action Type</th>
+                                <th>Title Pattern</th>
+                                <th>Times Fired</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rules-tbody">
+                        </tbody>
+                    </table>
+                    <div class="rules-empty" id="rules-empty">No auto-release rules configured.</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <span class="footer-info">
+            Ultra Agent System &mdash; Namespace: <span id="footer-namespace">jfchong.alliedgroup</span>
+        </span>
+        <span id="last-updated">Never updated</span>
+        <span class="footer-stats">
+            Approved: <span id="stat-approved">0</span> |
+            Rejected: <span id="stat-rejected">0</span> |
+            Auto-Released: <span id="stat-auto">0</span>
+        </span>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

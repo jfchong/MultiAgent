@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Work Release Server",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["scripts/release-server.py"],
+      "port": 53800
+    }
+  ]
+}

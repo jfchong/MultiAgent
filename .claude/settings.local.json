@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth:*)",
+      "Bash(where gh:*)",
+      "Bash(winget install:*)",
+      "Read(//c/Program Files \\(x86\\)/**)",
+      "Read(//c/Users/jfcho/AppData/**)",
+      "Bash(export PATH=\"/c/Program Files/GitHub CLI:$PATH\")",
+      "Bash(gh repo:*)",
+      "Bash(gh pr:*)",
+      "Bash(find /c/VSClaude -type f \\\\\\(-name *.js -o -name *.ts -o -name *.py -o -name *.sh -o -name *.bash \\\\\\))",
+      "Bash(python scripts/db-init.py)",
+      "Bash(python -c \"import sqlite3; c=sqlite3.connect\\(''ultra.db''\\); print\\(c.execute\\(''PRAGMA journal_mode''\\).fetchone\\(\\)\\); c.close\\(\\)\")",
+      "Bash(python scripts/db-utils.py get-agent planner)",
+      "Bash(python scripts/db-utils.py create-task --title \"Test task\" --description \"A test\" --assigned planner --priority 3)",
+      "Bash(python scripts/db-utils.py list-tasks --status assigned)",
+      "Bash(python scripts/db-utils.py get-config default_namespace)",
+      "Bash(python scripts/db-utils.py query \"DELETE FROM tasks WHERE title = ''Test task''\")",
+      "Bash(chmod +x \"C:/Users/jfcho/Desktop/CoWork/MultiAgent/scripts/dispatch-agent.sh\")",
+      "Bash(bash -n \"C:/Users/jfcho/Desktop/CoWork/MultiAgent/scripts/dispatch-agent.sh\")",
+      "Bash(python scripts/db-utils.py list-tasks --status assigned --agent planner)",
+      "Bash(python -c \":*)",
+      "Bash(python scripts/db-utils.py query \"DELETE FROM tasks\")",
+      "Bash(python scripts/db-utils.py list-tasks)",
+      "Bash(bash -n scripts/dispatch-agent.sh)",
+      "Bash(find C:UsersjfchoDesktopCoWork -type f -name *cowork* -o -name *dispatch* -o -name *db-init*)",
+      "Bash(grep -r \"CoWork\\\\|cowork\" C:UsersjfchoDesktopCoWorkMultiAgent --include=*.md --include=*.py --include=*.json)",
+      "Bash(grep -r \"preview\\\\|browser\\\\|chrome\" C:UsersjfchoDesktopCoWorkMultiAgent --include=*.md --include=*.py)",
+      "Bash(grep -r \"cowork\\\\|CoWork\" C:Usersjfcho.claude --include=*.md --include=*.json)",
+      "Bash(start \"\" \"docs/superpowers/specs/2026-04-05-browser-sessions-design.md\")",
+      "Bash(python scripts/db-utils.py create-credential --domain csshome.info --label \"PPPSU CSS Portal\" --username pppsu_admin --password secret123)",
+      "Bash(python scripts/db-utils.py list-credentials)",
+      "Bash(python scripts/db-utils.py delete-credential csshome.info)",
+      "Bash(python scripts/db-utils.py list-sessions --success 1)",
+      "Bash(python scripts/db-utils.py list-sessions --browser)",
+      "Bash(python scripts/db-utils.py query \"DELETE FROM session_recordings\")",
+      "Bash(python scripts/db-utils.py query \"DELETE FROM sessions\")",
+      "Bash(python scripts/db-utils.py query \"DELETE FROM credentials\")"
+    ]
+  }
+}
