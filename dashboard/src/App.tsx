@@ -9,6 +9,8 @@ import AgentDetailPage from "@/pages/AgentDetailPage";
 import ReleasesPage from "@/pages/ReleasesPage";
 import SkillsPage from "@/pages/SkillsPage";
 import SkillDetailPage from "@/pages/SkillDetailPage";
+import SessionsPage from "@/pages/SessionsPage";
+import SessionDetailPage from "@/pages/SessionDetailPage";
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -34,8 +36,8 @@ export default function App() {
         <Route path="releases" element={<ReleasesPage />} />
         <Route path="skills" element={<SkillsPage />} />
         <Route path="skills/:id" element={<SkillDetailPage />} />
-        <Route path="sessions" element={<PlaceholderPage title="Sessions" />} />
-        <Route path="sessions/:id" element={<PlaceholderPage title="Session Detail" />} />
+        <Route path="sessions" element={<SessionsPage />} />
+        <Route path="sessions/:id" element={<SessionDetailPage />} />
         <Route path="improvements" element={<PlaceholderPage title="Improvements" />} />
         <Route path="settings" element={<PlaceholderPage title="Settings" />} />
       </Route>
