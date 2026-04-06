@@ -7,6 +7,8 @@ import TaskDetailPage from "@/pages/TaskDetailPage";
 import AgentsPage from "@/pages/AgentsPage";
 import AgentDetailPage from "@/pages/AgentDetailPage";
 import ReleasesPage from "@/pages/ReleasesPage";
+import SkillsPage from "@/pages/SkillsPage";
+import SkillDetailPage from "@/pages/SkillDetailPage";
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -30,8 +32,8 @@ export default function App() {
         <Route path="agents" element={<AgentsPage />} />
         <Route path="agents/:id" element={<AgentDetailPage />} />
         <Route path="releases" element={<ReleasesPage />} />
-        <Route path="skills" element={<PlaceholderPage title="Skills" />} />
-        <Route path="skills/:id" element={<PlaceholderPage title="Skill Detail" />} />
+        <Route path="skills" element={<SkillsPage />} />
+        <Route path="skills/:id" element={<SkillDetailPage />} />
         <Route path="sessions" element={<PlaceholderPage title="Sessions" />} />
         <Route path="sessions/:id" element={<PlaceholderPage title="Session Detail" />} />
         <Route path="improvements" element={<PlaceholderPage title="Improvements" />} />
