@@ -11,17 +11,8 @@ import SkillsPage from "@/pages/SkillsPage";
 import SkillDetailPage from "@/pages/SkillDetailPage";
 import SessionsPage from "@/pages/SessionsPage";
 import SessionDetailPage from "@/pages/SessionDetailPage";
-
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div className="flex items-center justify-center h-full">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-foreground mb-2">{title}</h1>
-        <p className="text-muted-foreground">Coming soon</p>
-      </div>
-    </div>
-  );
-}
+import ImprovementsPage from "@/pages/ImprovementsPage";
+import SettingsPage from "@/pages/SettingsPage";
 
 export default function App() {
   return (
@@ -38,8 +29,8 @@ export default function App() {
         <Route path="skills/:id" element={<SkillDetailPage />} />
         <Route path="sessions" element={<SessionsPage />} />
         <Route path="sessions/:id" element={<SessionDetailPage />} />
-        <Route path="improvements" element={<PlaceholderPage title="Improvements" />} />
-        <Route path="settings" element={<PlaceholderPage title="Settings" />} />
+        <Route path="improvements" element={<ImprovementsPage />} />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
     </Routes>
   );
